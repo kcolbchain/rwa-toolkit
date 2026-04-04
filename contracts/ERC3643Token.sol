@@ -39,11 +39,11 @@ contract ERC3643Token is ERC20, Ownable, Pausable, IERC3643 {
     event TokensUnfrozen(address indexed wallet, uint256 amount);
     
     /// @notice Custom errors
-    InvalidReceiver(address receiver);
-    InvalidSender(address sender);
-    ComplianceCheckFailed(address from, address to, uint256 amount);
-    IdentityNotVerified(address wallet);
-    AddressFrozenError(address wallet);
+    error InvalidReceiver(address receiver);
+    error InvalidSender(address sender);
+    error ComplianceCheckFailed(address from, address to, uint256 amount);
+    error IdentityNotVerified(address wallet);
+    error AddressFrozenError(address wallet);
     
     /**
      * @dev Constructor
