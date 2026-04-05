@@ -1,0 +1,274 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "./interfaces/IERC3643.sol";
+import "./interfaces/IIdentityRegistry.sol";
+import "./interfaces/ICompliance.sol";
+
+/**
+ * @title ERC3643Token
+ * @dev Implementation of the ERC-3643 (T-REX) security token standard for Real World Assets (RWA)
+ * @notice This token includes identity verification and compliance checks for all transfers
+ * @author BountyClaw
+ */
+contract ERC3643Token is ERC20, Ownable, Pausable, IERC3643 {
+    
+    /// @notice Identity registry contract reference
+    IIdentityRegistry public identityRegistry;
+    
+    /// @notice Compliance contract reference
+    ICompliance public compliance;
+    
+    /// @notice Token decimals (typically 18)
+    uint8 private _tokenDecimals;
+    
+    /// @notice Token version
+    string public version;
+    
+    /// @notice Mapping of frozen addresses (cannot send/receive)
+    mapping(address => bool) public frozen;
+    
+    /// @notice Events
+    event IdentityRegistrySet(address indexed registry);
+    event ComplianceSet(address indexed compliance);
+    event AddressFrozen(address indexed wallet, bool frozen);
+    event TokensFrozen(address indexed wallet, uint256 amount);
+    event TokensUnfrozen(address indexed wallet, uint256 amount);
+    
+    /// @notice Custom errors
+    InvalidReceiver(address receiver);
+    InvalidSender(address sender);
+    ComplianceCheckFailed(address from, address to, uint256 amount);
+    IdentityNotVerified(address wallet);
+    AddressFrozenError(address wallet);
+    
+    /**
+     * @dev Constructor
+     * @param name_ Token name
+     * @param symbol_ Token symbol
+     * @param decimals_ Token decimals
+     * @param initialSupply Initial token supply
+     * @param identityRegistry_ Address of identity registry contract
+     * @param compliance_ Address of compliance contract
+     */
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        uint8 decimals_,
+        uint256 initialSupply,
+        address identityRegistry_,
+        address compliance_
+    ) ERC20(name_, symbol_) Ownable(msg.sender) {
+        _tokenDecimals = decimals_;
+        version = "1.0.0";
+        
+        identityRegistry = IIdentityRegistry(identityRegistry_);
+        compliance = ICompliance(compliance_);
+        
+        _mint(msg.sender, initialSupply);
+    }
+    
+    /**
+     * @notice Returns the number of decimals used for token amounts
+     */
+    function decimals() public view virtual override returns (uint8) {
+        return _tokenDecimals;
+    }
+    
+    /**
+     * @notice Set the identity registry contract
+     * @param _identityRegistry New identity registry address
+     */
+    function setIdentityRegistry(address _identityRegistry) external onlyOwner {
+        require(_identityRegistry != address(0), "Invalid address");
+        identityRegistry = IIdentityRegistry(_identityRegistry);
+        emit IdentityRegistrySet(_identityRegistry);
+    }
+    
+    /**
+     * @notice Set the compliance contract
+     * @param _compliance New compliance address
+     */
+    function setCompliance(address _compliance) external onlyOwner {
+        require(_compliance != address(0), "Invalid address");
+        compliance = ICompliance(_compliance);
+        emit ComplianceSet(_compliance);
+    }
+    
+    /**
+     * @notice Freeze/unfreeze an address
+     * @param _wallet Address to freeze/unfreeze
+     * @param _frozen True to freeze, false to unfreeze
+     */
+    function setAddressFrozen(address _wallet, bool _frozen) external onlyOwner {
+        frozen[_wallet] = _frozen;
+        emit AddressFrozen(_wallet, _frozen);
+    }
+    
+    /**
+     * @notice Batch freeze addresses
+     * @param _wallets Array of addresses to freeze
+     * @param _frozen True to freeze, false to unfreeze
+     */
+    function batchSetAddressFrozen(
+        address[] calldata _wallets,
+        bool _frozen
+    ) external onlyOwner {
+        for (uint256 i = 0; i < _wallets.length; i++) {
+            frozen[_wallets[i]] = _frozen;
+            emit AddressFrozen(_wallets[i], _frozen);
+        }
+    }
+    
+    /**
+     * @notice Check if transfer is valid
+     * @param _from Sender address
+     * @param _to Receiver address
+     * @param _amount Transfer amount
+     * @return isValid True if transfer is valid
+     */
+    function isTransferValid(
+        address _from,
+        address _to,
+        uint256 _amount
+    ) external view returns (bool isValid) {
+        return _isTransferValid(_from, _to, _amount);
+    }
+    
+    /**
+     * @notice Internal function to validate transfers
+     */
+    function _isTransferValid(
+        address _from,
+        address _to,
+        uint256 _amount
+    ) internal view returns (bool) {
+        // Check frozen status
+        if (frozen[_from] || frozen[_to]) {
+            return false;
+        }
+        
+        // Check identity verification (skip for zero address - mint/burn)
+        if (_from != address(0) && !identityRegistry.isVerified(_from)) {
+            return false;
+        }
+        if (_to != address(0) && !identityRegistry.isVerified(_to)) {
+            return false;
+        }
+        
+        // Check compliance rules
+        if (!compliance.canTransfer(_from, _to, _amount)) {
+            return false;
+        }
+        
+        return true;
+    }
+    
+    /**
+     * @notice Override transfer function with compliance checks
+     */
+    function transfer(address to, uint256 amount) public override returns (bool) {
+        require(_isTransferValid(msg.sender, to, amount), "Transfer not valid");
+        return super.transfer(to, amount);
+    }
+    
+    /**
+     * @notice Override transferFrom with compliance checks
+     */
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) public override returns (bool) {
+        require(_isTransferValid(from, to, amount), "Transfer not valid");
+        return super.transferFrom(from, to, amount);
+    }
+    
+    /**
+     * @notice Mint new tokens (only owner)
+     * @param to Recipient address
+     * @param amount Amount to mint
+     */
+    function mint(address to, uint256 amount) external onlyOwner {
+        require(_isTransferValid(address(0), to, amount), "Mint not valid");
+        _mint(to, amount);
+    }
+    
+    /**
+     * @notice Burn tokens (only owner)
+     * @param from Address to burn from
+     * @param amount Amount to burn
+     */
+    function burn(address from, uint256 amount) external onlyOwner {
+        _burn(from, amount);
+    }
+    
+    /**
+     * @notice Batch transfer tokens
+     * @param recipients Array of recipient addresses
+     * @param amounts Array of amounts
+     */
+    function batchTransfer(
+        address[] calldata recipients,
+        uint256[] calldata amounts
+    ) external returns (bool) {
+        require(recipients.length == amounts.length, "Length mismatch");
+        
+        for (uint256 i = 0; i < recipients.length; i++) {
+            require(transfer(recipients[i], amounts[i]), "Transfer failed");
+        }
+        
+        return true;
+    }
+    
+    /**
+     * @notice Pause token transfers
+     */
+    function pause() external onlyOwner {
+        _pause();
+    }
+    
+    /**
+     * @notice Unpause token transfers
+     */
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+    
+    /**
+     * @notice Get token info
+     */
+    function getTokenInfo() external view returns (
+        string memory name,
+        string memory symbol,
+        uint8 decimalPlaces,
+        uint256 totalSupply,
+        address identityRegistryAddress,
+        address complianceAddress,
+        string memory tokenVersion
+    ) {
+        return (
+            name(),
+            symbol(),
+            decimals(),
+            totalSupply(),
+            address(identityRegistry),
+            address(compliance),
+            version
+        );
+    }
+    
+    /**
+     * @dev Override _beforeTokenTransfer to add compliance checks
+     */
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal override whenNotPaused {
+        super._beforeTokenTransfer(from, to, amount);
+    }
+}
