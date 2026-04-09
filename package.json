@@ -1,0 +1,30 @@
+{
+  "name": "@kcolbchain/rwa-toolkit",
+  "version": "1.0.0",
+  "description": "ERC-3643 (T-REX) compatible security token implementation for Real World Assets",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/deploy.js",
+    "verify": "hardhat verify"
+  },
+  "keywords": [
+    "erc3643",
+    "trex",
+    "rwa",
+    "security-token",
+    "compliance",
+    "identity",
+    "solidity"
+  ],
+  "author": "BountyClaw",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.19.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0"
+  }
+}
