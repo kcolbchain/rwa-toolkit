@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>rwa-toolkit — RWA standards explorer + compliance simulator</title>
+<meta name="description" content="Side-by-side ERC-3643 / ERC-1404 / KAIO; live transfer-restriction simulator. By kcolbchain." />
+<style>
+  :root {
+    --bg: #0b0d10; --panel: #13161b; --panel-2: #0f1216; --border: #23272f;
+    --fg: #e7e9ee; --muted: #8a93a3;
+    --accent: #f59e0b; --ok: #34d399; --warn: #fbbf24; --hot: #f87171; --info: #7dd3fc;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  header { padding: 22px 32px; border-bottom: 1px solid var(--border); display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:12px; }
+  header h1 { margin:0; font-size: 20px; }
+  header h1 .dot { color: var(--accent); }
+  header p { margin:0; color: var(--muted); font-size: 13px; }
+  main { padding: 24px 32px 80px 32px; max-width: 1200px; margin: 0 auto; }
+  h2 { font-size: 16px; margin: 28px 0 10px 0; }
+  h2:first-of-type { margin-top: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+  table.standards { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.standards th, table.standards td { padding: 10px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+  table.standards thead th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; }
+  table.standards td.label { color: var(--muted); width: 200px; }
+  table.standards td.std { width: 26%; }
+  table.standards td .y { color: var(--ok); }
+  table.standards td .n { color: var(--hot); }
+  table.standards td .partial { color: var(--warn); }
+  .layout-sim { display: grid; grid-template-columns: 320px 1fr; gap: 16px; }
+  @media (max-width: 900px) { .layout-sim { grid-template-columns: 1fr; } }
+  .controls { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .controls h3 { margin: 0 0 8px 0; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .field { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; gap: 10px; }
+  .field label { color: var(--muted); font-size: 12px; flex: 1; }
+  .field select, .field input { background: var(--panel-2); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 12px; }
+  .field select { width: 130px; }
+  .field input[type=number] { width: 100px; font-family: var(--mono); text-align: right; }
+  .checks { display: grid; gap: 10px; }
+  .check { background: var(--panel); border: 1px solid var(--border); border-left-width: 3px; border-radius: 8px; padding: 10px 14px; }
+  .check.pass { border-left-color: var(--ok); }
+  .check.fail { border-left-color: var(--hot); }
+  .check .top { display: flex; justify-content: space-between; align-items: center; }
+  .check .name { font-weight: 600; font-size: 13.5px; }
+  .check .res { font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 99px; }
+  .check.pass .res { background: #0e2a1e; color: var(--ok); }
+  .check.fail .res { background: #2a1212; color: var(--hot); }
+  .check .reason { color: var(--muted); font-size: 12px; margin-top: 6px; font-family: var(--mono); }
+  .verdict { padding: 14px 16px; border-radius: 10px; font-weight: 600; font-size: 14px; margin-bottom: 12px; display:flex; justify-content: space-between; align-items: center; }
+  .verdict.ok  { background: #0e2a1e; color: var(--ok); border: 1px solid #1a4a32; }
+  .verdict.no  { background: #2a1212; color: var(--hot); border: 1px solid #4a1f1f; }
+  .verdict .restriction-code { font-family: var(--mono); font-size: 12px; font-weight: 400; opacity: 0.8; }
+  pre { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-family: var(--mono); font-size: 12px; line-height: 1.55; margin: 0; }
+  .kw  { color: #c4b5fd; }
+  .str { color: #86efac; }
+  .com { color: var(--muted); font-style: italic; }
+  .typ { color: var(--info); }
+  .fn  { color: var(--warn); }
+  .badge { display:inline-block; font-family: var(--mono); font-size: 10.5px; padding: 2px 7px; border-radius: 99px; background: #1f232b; color: var(--muted); margin-left: 6px; }
+  .badge.kcb { background: #0e2a1e; color: var(--ok); }
+  footer { padding: 20px 32px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>rwa-toolkit<span class="dot">.</span> <span style="color:var(--muted);font-weight:400">RWA standards + compliance simulator</span></h1>
+    <p>Side-by-side ERC-3643 / ERC-1404 / KAIO; live transfer-restriction checks against a configurable token policy.</p>
+  </div>
+  <div style="display:flex;gap:14px;align-items:center">
+    <a href="https://github.com/kcolbchain/rwa-toolkit">source</a>
+    <a href="https://docs.kcolbchain.com/rwa-toolkit/">docs</a>
+  </div>
+</header>
+
+<main>
+
+  <h2>Standards: where each fits</h2>
+  <div class="panel" style="overflow-x: auto">
+    <table class="standards">
+      <thead>
+        <tr>
+          <th class="label"></th>
+          <th class="std">ERC-3643 <span class="badge">T-REX, ONCHAINID</span></th>
+          <th class="std">ERC-1404 <span class="badge">simple restricted</span></th>
+          <th class="std">KAIO <span class="badge">protocol-engine</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="label">Compliance lives</td>
+          <td class="std">In the token (modular engine).</td>
+          <td class="std">In a sibling contract; token only returns reason codes.</td>
+          <td class="std">In a separate on-chain protocol engine; token is a vanilla ERC-20.</td>
+        </tr>
+        <tr><td class="label">Identity primitive</td>
+          <td class="std">ONCHAINID with claim topics &amp; trusted issuers.</td>
+          <td class="std">None mandated. Issuer rolls their own.</td>
+          <td class="std">Externalised — engine reads any KYC oracle.</td>
+        </tr>
+        <tr><td class="label">DeFi composability</td>
+          <td class="std"><span class="partial">partial</span> — can revert in arbitrary lp pools.</td>
+          <td class="std"><span class="partial">partial</span> — same revert risk; reason-code helps UX.</td>
+          <td class="std"><span class="y">high</span> — ERC-20 surface is unchanged.</td>
+        </tr>
+        <tr><td class="label">Modify rules without redeploy</td>
+          <td class="std"><span class="y">yes</span> — swap modules.</td>
+          <td class="std"><span class="y">yes</span> — upgrade external logic.</td>
+          <td class="std"><span class="y">yes</span> — engine is independent.</td>
+        </tr>
+        <tr><td class="label">Jurisdictional gating</td>
+          <td class="std">Native via claim modules.</td>
+          <td class="std">Custom; encode in restriction codes.</td>
+          <td class="std">Native; engine plug-in.</td>
+        </tr>
+        <tr><td class="label">Holder cap / max-investors</td>
+          <td class="std">Module.</td>
+          <td class="std">Custom.</td>
+          <td class="std">Module.</td>
+        </tr>
+        <tr><td class="label">Best fit</td>
+          <td class="std">Regulated security tokens (Reg D / Reg S issuances).</td>
+          <td class="std">Lightweight restricted tokens (employee equity, club tokens).</td>
+          <td class="std">Permissioned RWA that needs to plug into existing AMMs / lending.</td>
+        </tr>
+        <tr><td class="label">In this repo</td>
+          <td class="std"><code>contracts/ERC3643Token.sol</code><br/><code>BasicCompliance.sol</code> + <code>IdentityRegistry.sol</code></td>
+          <td class="std"><span class="badge">roadmap</span> — adapter wanted, see <a href="https://github.com/kcolbchain/rwa-toolkit/issues">issues</a>.</td>
+          <td class="std"><span class="badge">roadmap</span> — adapter wanted.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Transfer-restriction simulator</h2>
+  <p style="color:var(--muted);margin-top:0">Configure a token policy on the left; pick a transfer; see which checks fire and why.</p>
+
+  <div class="layout-sim">
+    <div>
+      <div class="controls">
+        <h3>Token policy</h3>
+        <div class="field"><label>Standard</label><select id="standard">
+          <option value="erc3643" selected>ERC-3643 (token)</option>
+          <option value="erc1404">ERC-1404 (sibling)</option>
+          <option value="kaio">KAIO (engine)</option>
+        </select></div>
+        <div class="field"><label>Allowed jurisdictions</label><select id="jurisdictions" multiple style="width:130px;height:80px">
+          <option value="US" selected>US</option>
+          <option value="EU" selected>EU</option>
+          <option value="UK" selected>UK</option>
+          <option value="SG">SG</option>
+          <option value="AE">AE</option>
+          <option value="IN">IN</option>
+        </select></div>
+        <div class="field"><label>Min investor accreditation</label><select id="accreditation">
+          <option value="none">none</option>
+          <option value="qualified" selected>qualified</option>
+          <option value="institutional">institutional only</option>
+        </select></div>
+        <div class="field"><label>Max holders</label><input type="number" id="maxHolders" value="99" min="1" max="100000"></div>
+        <div class="field"><label>Max balance / holder</label><input type="number" id="maxBal" value="100000" min="1"></div>
+        <div class="field"><label>Lock-up until block</label><input type="number" id="lockup" value="120" min="0"></div>
+        <div class="field"><label>Require sanctions clear</label><input type="checkbox" id="sanctions" checked></div>
+      </div>
+
+      <div class="controls" style="margin-top: 12px">
+        <h3>Transfer attempt</h3>
+        <div class="field"><label>From wallet</label><select id="from">
+          <option value="alice">Alice (US, qualified, holder 12)</option>
+          <option value="bob">Bob (EU, institutional, holder 0)</option>
+          <option value="charlie">Charlie (US, retail, holder 88)</option>
+          <option value="dave">Dave (RU, sanctioned)</option>
+        </select></div>
+        <div class="field"><label>To wallet</label><select id="to">
+          <option value="bob">Bob (EU, institutional, holder 0)</option>
+          <option value="erin">Erin (SG, qualified, holder 0)</option>
+          <option value="frank">Frank (US, retail, holder 0)</option>
+          <option value="greg">Greg (IR, sanctioned)</option>
+          <option value="hilda">Hilda (US, qualified, holder 0, balance 95K)</option>
+        </select></div>
+        <div class="field"><label>Amount</label><input type="number" id="amount" value="500" min="0.01"></div>
+        <div class="field"><label>Current block</label><input type="number" id="block" value="200" min="0"></div>
+      </div>
+    </div>
+
+    <div>
+      <div id="verdict" class="verdict ok"><span>—</span><span class="restriction-code"></span></div>
+      <div id="checks" class="checks"></div>
+      <div class="panel" style="margin-top: 14px">
+        <h3 style="margin-top:0;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Reference Solidity hook (current standard)</h3>
+        <pre id="codeRef"></pre>
+      </div>
+    </div>
+  </div>
+
+  <h2>Where this fits in the kcolbchain stack</h2>
+  <div class="panel">
+    <p style="margin:0 0 10px 0">RWA tokens issued via this toolkit plug into:</p>
+    <ul style="margin:0 0 0 18px;padding:0">
+      <li><a href="https://github.com/kcolbchain/meridian">meridian</a> — RWA market-making agent. Quotes are gated per counterparty against the same compliance engine used here.</li>
+      <li><a href="https://github.com/kcolbchain/stablecoin-toolkit">stablecoin-toolkit</a> — settles cash-leg in regulated stablecoins with the same identity primitives.</li>
+      <li><a href="https://github.com/kcolbchain/audit-checklist">audit-checklist</a> — drop-in Foundry templates that exercise these compliance modules at audit time.</li>
+      <li><a href="https://github.com/kcolbchain/switchboard">switchboard</a> — agent wallets that hold ONCHAINID claims and can transact tokenised RWA via x402 / MPP / AP2 rails.</li>
+    </ul>
+  </div>
+
+</main>
+
+<footer>
+  Compliance modelling here is a teaching tool — the production check lives on-chain in
+  <code>contracts/BasicCompliance.sol</code> and <code>IdentityRegistry.sol</code>. Standards summary is based on the
+  Apr 2026 RWA tokenization landscape (ERC-3643 / ERC-1404 / KAIO). Open an issue if a constraint you depend on isn't
+  modelled.
+</footer>
+
+<script>
+// ================================================================= wallets
+const WALLETS = {
+  alice:   { jurisdiction: "US", accreditation: "qualified",     holderIndex: 12, balance: 800,    sanctioned: false },
+  bob:     { jurisdiction: "EU", accreditation: "institutional", holderIndex: 0,  balance: 0,      sanctioned: false },
+  charlie: { jurisdiction: "US", accreditation: "retail",        holderIndex: 88, balance: 50,     sanctioned: false },
+  dave:    { jurisdiction: "RU", accreditation: "qualified",     holderIndex: 5,  balance: 100,    sanctioned: true  },
+  erin:    { jurisdiction: "SG", accreditation: "qualified",     holderIndex: 0,  balance: 0,      sanctioned: false },
+  frank:   { jurisdiction: "US", accreditation: "retail",        holderIndex: 0,  balance: 0,      sanctioned: false },
+  greg:    { jurisdiction: "IR", accreditation: "qualified",     holderIndex: 0,  balance: 0,      sanctioned: true  },
+  hilda:   { jurisdiction: "US", accreditation: "qualified",     holderIndex: 0,  balance: 95000,  sanctioned: false },
+};
+const ACC_RANK = { "none": 0, "retail": 1, "qualified": 2, "institutional": 3 };
+
+// ================================================================= sim
+function getPolicy() {
+  return {
+    standard: document.getElementById("standard").value,
+    jurisdictions: Array.from(document.getElementById("jurisdictions").selectedOptions).map(o => o.value),
+    accreditation: document.getElementById("accreditation").value,
+    maxHolders: parseInt(document.getElementById("maxHolders").value, 10),
+    maxBal: parseFloat(document.getElementById("maxBal").value),
+    lockup: parseInt(document.getElementById("lockup").value, 10),
+    sanctions: document.getElementById("sanctions").checked,
+  };
+}
+
+function runChecks() {
+  const p = getPolicy();
+  const fromKey = document.getElementById("from").value;
+  const toKey   = document.getElementById("to").value;
+  const amount  = parseFloat(document.getElementById("amount").value);
+  const block   = parseInt(document.getElementById("block").value, 10);
+  const from = WALLETS[fromKey], to = WALLETS[toKey];
+
+  const checks = [];
+
+  checks.push({
+    name: "Lock-up period elapsed",
+    pass: block >= p.lockup,
+    reason: block >= p.lockup ? `block ${block} ≥ lockup ${p.lockup}` : `block ${block} < lockup ${p.lockup}`,
+    code: 1,
+  });
+
+  checks.push({
+    name: "From / to jurisdiction allowed",
+    pass: p.jurisdictions.includes(from.jurisdiction) && p.jurisdictions.includes(to.jurisdiction),
+    reason: `from ${from.jurisdiction}, to ${to.jurisdiction}; allowed: ${p.jurisdictions.join(",")}`,
+    code: 2,
+  });
+
+  if (p.sanctions) {
+    checks.push({
+      name: "Sanctions screen",
+      pass: !from.sanctioned && !to.sanctioned,
+      reason: from.sanctioned ? `from is sanctioned` : to.sanctioned ? `to is sanctioned` : "both clear",
+      code: 3,
+    });
+  }
+
+  checks.push({
+    name: "Recipient accreditation ≥ minimum",
+    pass: ACC_RANK[to.accreditation] >= ACC_RANK[p.accreditation],
+    reason: `to is ${to.accreditation}; minimum ${p.accreditation}`,
+    code: 4,
+  });
+
+  checks.push({
+    name: "Sender has balance",
+    pass: from.balance >= amount,
+    reason: `from holds ${from.balance}; transfer ${amount}`,
+    code: 5,
+  });
+
+  // holder cap: only triggers if recipient is new holder
+  const recipientIsNew = to.balance === 0;
+  checks.push({
+    name: "Below max-holders cap",
+    pass: !recipientIsNew || (Math.max(from.holderIndex, to.holderIndex) < p.maxHolders),
+    reason: recipientIsNew
+      ? `recipient is a new holder; current high-water = ${Math.max(from.holderIndex, to.holderIndex)}, cap = ${p.maxHolders}`
+      : `recipient already a holder, no cap impact`,
+    code: 6,
+  });
+
+  checks.push({
+    name: "Recipient balance ≤ per-holder cap",
+    pass: (to.balance + amount) <= p.maxBal,
+    reason: `${to.balance} + ${amount} = ${to.balance + amount}; cap = ${p.maxBal}`,
+    code: 7,
+  });
+
+  return checks;
+}
+
+// reason-code → ERC-1404 style human reason
+const REASONS = {
+  1: "TRANSFER_LOCKED — hold period not elapsed",
+  2: "JURISDICTION_FORBIDDEN — counterparty not in allow-list",
+  3: "SANCTIONS_HIT — sanctioned address",
+  4: "ACCREDITATION_TOO_LOW — recipient does not meet minimum tier",
+  5: "INSUFFICIENT_BALANCE — sender does not hold the amount",
+  6: "MAX_HOLDERS_REACHED — issuance cap binding",
+  7: "MAX_BALANCE_PER_HOLDER — recipient would exceed per-holder cap",
+};
+
+function refSolidity(standard) {
+  if (standard === "erc3643") {
+    return `<span class="com">// ERC-3643 — compliance modules invoked from inside the token</span>
+<span class="kw">function</span> <span class="fn">transfer</span>(<span class="typ">address</span> to, <span class="typ">uint256</span> amount)
+    <span class="kw">public override returns</span> (<span class="kw">bool</span>)
+{
+    <span class="kw">require</span>(_compliance.canTransfer(msg.sender, to, amount), <span class="str">"compliance"</span>);
+    <span class="kw">require</span>(_identityRegistry.isVerified(to),                   <span class="str">"unverified"</span>);
+    <span class="kw">return super</span>.<span class="fn">transfer</span>(to, amount);
+}`;
+  }
+  if (standard === "erc1404") {
+    return `<span class="com">// ERC-1404 — restriction code, transfer reverts if non-zero</span>
+<span class="kw">function</span> <span class="fn">detectTransferRestriction</span>(<span class="typ">address</span> from, <span class="typ">address</span> to, <span class="typ">uint256</span> amount)
+    <span class="kw">public view returns</span> (<span class="typ">uint8</span>)
+{
+    <span class="kw">return</span> _restrictor.<span class="fn">code</span>(from, to, amount);  <span class="com">// 0 = ok</span>
+}
+
+<span class="kw">function</span> <span class="fn">messageForTransferRestriction</span>(<span class="typ">uint8</span> code)
+    <span class="kw">public view returns</span> (<span class="kw">string memory</span>)
+{
+    <span class="kw">return</span> _restrictor.<span class="fn">message</span>(code);
+}`;
+  }
+  // KAIO
+  return `<span class="com">// KAIO — vanilla ERC-20, engine sits in front of every transfer</span>
+<span class="kw">contract</span> <span class="typ">KaioToken</span> <span class="kw">is</span> <span class="typ">ERC20</span> {
+    IComplianceEngine <span class="kw">public</span> engine;
+
+    <span class="kw">function</span> <span class="fn">_update</span>(<span class="typ">address</span> from, <span class="typ">address</span> to, <span class="typ">uint256</span> v)
+        <span class="kw">internal override</span>
+    {
+        <span class="kw">require</span>(engine.<span class="fn">precheck</span>(from, to, v), <span class="str">"compliance"</span>);
+        <span class="kw">super</span>._update(from, to, v);
+        engine.<span class="fn">postcheck</span>(from, to, v);
+    }
+}`;
+}
+
+function render() {
+  const checks = runChecks();
+  const failing = checks.filter(c => !c.pass);
+  const verdict = document.getElementById("verdict");
+  const codeBox = document.getElementById("codeRef");
+
+  if (failing.length === 0) {
+    verdict.className = "verdict ok";
+    verdict.innerHTML = `<span>✓ Transfer would succeed</span><span class="restriction-code">restriction code: 0</span>`;
+  } else {
+    verdict.className = "verdict no";
+    const f0 = failing[0];
+    verdict.innerHTML = `<span>✗ Transfer would revert — ${REASONS[f0.code].split(" — ")[0]}</span><span class="restriction-code">restriction code: ${f0.code} · ${failing.length} failing check${failing.length>1?"s":""}</span>`;
+  }
+
+  document.getElementById("checks").innerHTML = checks.map(c => `
+    <div class="check ${c.pass ? 'pass' : 'fail'}">
+      <div class="top"><span class="name">${c.name}</span><span class="res">${c.pass ? 'pass' : 'fail · code ' + c.code}</span></div>
+      <div class="reason">${c.reason}</div>
+    </div>
+  `).join("");
+
+  codeBox.innerHTML = refSolidity(getPolicy().standard);
+}
+
+// wire
+["standard","jurisdictions","accreditation","maxHolders","maxBal","lockup","sanctions","from","to","amount","block"]
+  .forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener("input", render);
+    el.addEventListener("change", render);
+  });
+render();
+</script>
+</body>
+</html>
