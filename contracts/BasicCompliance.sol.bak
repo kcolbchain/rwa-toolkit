@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./interfaces/ICompliance.sol";
+import "./broken/interfaces/ICompliance.sol";
 
 /**
  * @title BasicCompliance
@@ -38,7 +38,7 @@ contract BasicCompliance is ICompliance, Ownable {
     event GlobalMaxTransferAmountSet(uint256 amount);
     
     /// @notice Constructor
-    constructor(address initialOwner) Ownable(initialOwner) {
+    constructor(address initialOwner) Ownable() {
         globalMaxTransferAmount = type(uint256).max; // No limit by default
     }
     

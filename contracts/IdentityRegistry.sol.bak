@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./interfaces/IIdentityRegistry.sol";
+import "./broken/interfaces/IIdentityRegistry.sol";
 
 /**
  * @title IdentityRegistry
@@ -39,7 +39,7 @@ contract IdentityRegistry is IIdentityRegistry, Ownable {
      * @dev Constructor
      * @param initialOwner Address of the contract owner
      */
-    constructor(address initialOwner) Ownable(initialOwner) {}
+    constructor(address initialOwner) Ownable() {}
     
     /**
      * @notice Modifier to restrict to trusted issuers
@@ -160,20 +160,23 @@ contract IdentityRegistry is IIdentityRegistry, Ownable {
      */
     function batchRegisterIdentities(
         address[] calldata _wallets,
-        address[] calldata _identities
+        address[] calldata _identityAddresses
     ) external override onlyTrustedIssuer {
-        require(_wallets.length == _identities.length, "Arrays length mismatch");
+        require(_wallets.length == _identityAddresses.length, "Arrays length mismatch");
         
         for (uint256 i = 0; i < _wallets.length; i++) {
-            require(_wallets[i] != address(0), "Invalid wallet");
-            require(_identities[i] != address(0), "Invalid identity");
-            require(_identities[_wallets[i]] == address(0), "Identity already exists");
+            address wallet = _wallets[i];
+            address identity = _identityAddresses[i];
             
-            _identities[_wallets[i]] = _identities[i];
-            _verifiedIdentities[_identities[i]] = true;
-            _registeredWallets.push(_wallets[i]);
+            require(wallet != address(0), "Invalid wallet");
+            require(identity != address(0), "Invalid identity");
+            require(_identities[wallet] == address(0), "Identity already exists");
             
-            emit IdentityRegistered(_wallets[i], _identities[i]);
+            _identities[wallet] = identity;
+            _verifiedIdentities[identity] = true;
+            _registeredWallets.push(wallet);
+            
+            emit IdentityRegistered(wallet, identity);
         }
     }
     

@@ -61,7 +61,7 @@ contract ERC3643Token is ERC20, Ownable, Pausable, IERC3643 {
         uint256 initialSupply,
         address identityRegistry_,
         address compliance_
-    ) ERC20(name_, symbol_) Ownable(msg.sender) {
+    ) ERC20(name_, symbol_) Ownable() {
         _tokenDecimals = decimals_;
         version = "1.0.0";
         
@@ -242,10 +242,10 @@ contract ERC3643Token is ERC20, Ownable, Pausable, IERC3643 {
      * @notice Get token info
      */
     function getTokenInfo() external view returns (
-        string memory name,
-        string memory symbol,
+        string memory tokenName,
+        string memory tokenSymbol,
         uint8 decimalPlaces,
-        uint256 totalSupply,
+        uint256 supply,
         address identityRegistryAddress,
         address complianceAddress,
         string memory tokenVersion
