@@ -1,0 +1,11 @@
+-e # Foundry
+cache/
+out/
+
+# Editor
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
