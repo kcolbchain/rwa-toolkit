@@ -1,4 +1,5 @@
 # rwa-toolkit
+[![repo](https://img.shields.io/badge/repo-rwa-toolkit-blue)](https://github.com/kcolbchain/rwa-toolkit)
 
 > RWA tokenization standard and toolkit — geography-aware, compliance-native
 
