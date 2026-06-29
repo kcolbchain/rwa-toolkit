@@ -24,6 +24,11 @@ contract JurisdictionComplianceTest is Test {
     bytes32 RETAIL = "retail";
     bytes32 QUALIFIED = "qualified";
 
+    // Local mirrors of the interface events for vm.expectEmit matching.
+    event InvestorRegistered(address indexed investor, bytes32 jurisdiction, bytes32 category);
+    event TransferAllowed(bytes32 indexed fromJurisdiction, bytes32 indexed toJurisdiction);
+    event TransferBlocked(bytes32 indexed fromJurisdiction, bytes32 indexed toJurisdiction);
+
     function setUp() public {
         compliance = new JurisdictionCompliance(owner);
 
@@ -93,8 +98,12 @@ contract JurisdictionComplianceTest is Test {
     // --- Same Jurisdiction Transfer Tests ---
 
     function test_sameJurisdictionAllowed() public {
-        // Both US accredited
-        bool ok = compliance.isTransferCompliant(investor1, investor4);
+        // Same jurisdiction (US) AND same category (accredited) must pass both
+        // the jurisdiction and category checks. investor1 is US/accredited;
+        // register a second US/accredited investor to transfer to.
+        address usAccredited2 = address(0x8);
+        compliance.registerInvestor(usAccredited2, US, ACCREDITED);
+        bool ok = compliance.isTransferCompliant(investor1, usAccredited2);
         assertTrue(ok);
     }
 
@@ -143,9 +152,16 @@ contract JurisdictionComplianceTest is Test {
     }
 
     function test_allowNewJurisdictionTransfer() public {
-        // Allow JP->US
+        // JP->US is blocked by default. Register a JP/accredited investor so the
+        // category check (accredited->accredited) passes and only the newly
+        // allowed jurisdiction rule determines the outcome.
+        address jpAccredited = address(0xA);
+        compliance.registerInvestor(jpAccredited, JP, ACCREDITED);
+        assertFalse(compliance.isTransferCompliant(jpAccredited, investor1));
+
+        // Allow JP->US and confirm the transfer is now compliant.
         compliance.setAllowedTransfer(JP, US, true);
-        bool ok = compliance.isTransferCompliant(investor3, investor1);
+        bool ok = compliance.isTransferCompliant(jpAccredited, investor1);
         assertTrue(ok);
     }
 
@@ -179,10 +195,27 @@ contract JurisdictionComplianceTest is Test {
     }
 
     function test_blockCategoryTransfer() public {
-        // Block accredited -> accredited (previously allowed)
-        compliance.setAllowedCategoryTransfer(ACCREDITED, ACCREDITED, false);
-        bool ok = compliance.isTransferCompliant(investor1, investor2);
+        // accredited -> qualified is allowed by default; register an EU/qualified
+        // receiver so the jurisdiction check (US->EU) passes and only the
+        // category rule is exercised.
+        address euQualified = address(0x9);
+        compliance.registerInvestor(euQualified, EU, QUALIFIED);
+        assertTrue(compliance.isTransferCompliant(investor1, euQualified));
+
+        // Block accredited -> qualified and confirm the transfer is now denied.
+        compliance.setAllowedCategoryTransfer(ACCREDITED, QUALIFIED, false);
+        bool ok = compliance.isTransferCompliant(investor1, euQualified);
         assertFalse(ok);
+    }
+
+    function test_sameCategoryAlwaysAllowedRegardlessOfMapping() public {
+        // Same-category transfers are hard-coded as allowed; toggling the
+        // cross-category mapping for an identical pair has no effect.
+        compliance.setAllowedCategoryTransfer(ACCREDITED, ACCREDITED, false);
+        // US->EU jurisdiction is allowed and both are accredited.
+        bool ok = compliance.isTransferCompliant(investor1, investor2);
+        assertTrue(ok);
+        assertTrue(compliance.isCategoryTransferAllowed(ACCREDITED, ACCREDITED));
     }
 
     // --- Unregistered Investor Tests ---
@@ -267,5 +300,84 @@ contract JurisdictionComplianceTest is Test {
         compliance.removeInvestor(newInv);
         vm.expectRevert("Receiver not registered");
         compliance.isTransferCompliant(investor1, newInv);
+    }
+
+    // --- Additional geo-gating edge cases ---
+
+    // Jurisdiction rules are directional: allowing A->B does not allow B->A.
+    function test_asymmetricJurisdictionRule() public {
+        address auInvestor = address(0x30); // AU, accredited
+        compliance.registerInvestor(auInvestor, keccak256("AU"), ACCREDITED);
+
+        // Allow US->AU only.
+        compliance.setAllowedTransfer(US, keccak256("AU"), true);
+        assertTrue(compliance.isTransferCompliant(investor1, auInvestor)); // US->AU
+        // Reverse direction (AU->US) was never allowed.
+        assertFalse(compliance.isTransferCompliant(auInvestor, investor1));
+    }
+
+    function test_revokingJurisdictionReblocks() public {
+        // US->EU is allowed by default.
+        assertTrue(compliance.isTransferCompliant(investor1, investor2));
+        compliance.setAllowedTransfer(US, EU, false);
+        assertFalse(compliance.isTransferCompliant(investor1, investor2));
+        compliance.setAllowedTransfer(US, EU, true);
+        assertTrue(compliance.isTransferCompliant(investor1, investor2));
+    }
+
+    function test_updateInvestorChangesGeoGating() public {
+        // investor3 is JP/retail; JP->US is blocked. Move investor3 to US.
+        address usRetailDest = address(0x31);
+        compliance.registerInvestor(usRetailDest, US, RETAIL);
+        assertFalse(compliance.isTransferCompliant(investor3, usRetailDest)); // JP->US blocked
+
+        compliance.updateInvestor(investor3, US, bytes32(0)); // now US/retail
+        // US->US (default allowed) and retail->retail (allowed) => compliant.
+        assertTrue(compliance.isTransferCompliant(investor3, usRetailDest));
+    }
+
+    function test_registerEmitsEvent() public {
+        address newInv = address(0x32);
+        vm.expectEmit(true, false, false, true);
+        emit InvestorRegistered(newInv, SG, QUALIFIED);
+        compliance.registerInvestor(newInv, SG, QUALIFIED);
+    }
+
+    function test_setAllowedTransferEmitsAllowAndBlock() public {
+        vm.expectEmit(true, true, false, false);
+        emit TransferAllowed(JP, US);
+        compliance.setAllowedTransfer(JP, US, true);
+
+        vm.expectEmit(true, true, false, false);
+        emit TransferBlocked(JP, US);
+        compliance.setAllowedTransfer(JP, US, false);
+    }
+
+    function test_removeInvestorBlocksAsSenderAndReceiver() public {
+        compliance.removeInvestor(investor1);
+        vm.expectRevert("Sender not registered");
+        compliance.isTransferCompliant(investor1, investor2);
+
+        vm.expectRevert("Receiver not registered");
+        compliance.isTransferCompliant(investor2, investor1);
+    }
+
+    function test_investorEnumeration() public {
+        // setUp registered 4 investors; the public array getter exposes them.
+        assertEq(compliance.getInvestorCount(), 4);
+        assertEq(compliance.investors(0), investor1);
+        assertEq(compliance.investors(3), investor4);
+    }
+
+    function test_cannotRegisterEmptyCategory() public {
+        vm.expectRevert("Invalid category");
+        compliance.registerInvestor(address(0x33), US, bytes32(0));
+    }
+
+    // Same jurisdiction + cross-category that is NOT in the default mapping
+    // must be blocked (retail cannot receive from accredited by default).
+    function test_sameJurisdictionCrossCategoryBlocked() public {
+        // investor1 US/accredited -> investor4 US/retail.
+        assertFalse(compliance.isTransferCompliant(investor1, investor4));
     }
 }

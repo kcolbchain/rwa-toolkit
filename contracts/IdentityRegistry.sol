@@ -156,24 +156,24 @@ contract IdentityRegistry is IIdentityRegistry, Ownable {
     /**
      * @notice Batch register identities
      * @param _wallets Array of wallet addresses
-     * @param _identities Array of identity contract addresses
+     * @param _newIdentities Array of identity contract addresses
      */
     function batchRegisterIdentities(
         address[] calldata _wallets,
-        address[] calldata _identities
+        address[] calldata _newIdentities
     ) external override onlyTrustedIssuer {
-        require(_wallets.length == _identities.length, "Arrays length mismatch");
-        
+        require(_wallets.length == _newIdentities.length, "Arrays length mismatch");
+
         for (uint256 i = 0; i < _wallets.length; i++) {
             require(_wallets[i] != address(0), "Invalid wallet");
-            require(_identities[i] != address(0), "Invalid identity");
+            require(_newIdentities[i] != address(0), "Invalid identity");
             require(_identities[_wallets[i]] == address(0), "Identity already exists");
-            
-            _identities[_wallets[i]] = _identities[i];
-            _verifiedIdentities[_identities[i]] = true;
+
+            _identities[_wallets[i]] = _newIdentities[i];
+            _verifiedIdentities[_newIdentities[i]] = true;
             _registeredWallets.push(_wallets[i]);
-            
-            emit IdentityRegistered(_wallets[i], _identities[i]);
+
+            emit IdentityRegistered(_wallets[i], _newIdentities[i]);
         }
     }
     

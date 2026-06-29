@@ -1,3 +1,5 @@
-node_modules/@openzeppelin
-lib/openzeppelin-contracts
+node_modules/
 out/
+cache/
+artifacts/
+foundry.lock
